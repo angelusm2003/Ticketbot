@@ -14,7 +14,7 @@
 
 ## Links
 
-- **Live Deployment:** https://ticketbot-bear.vercel.app
+- **Live Deployment:** https://ticketbot-54ek6igya-angel-quintanillas-projects.vercel.app
 - **GitHub Repository:** https://github.com/angelusm2003/Ticketbot
 
 ---
