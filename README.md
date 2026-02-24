@@ -76,7 +76,13 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a `.env.local` file in the project root:
+Copy the example file and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
 
 ```env
 # Supabase
@@ -86,9 +92,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
 # NextAuth
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-a-random-secret-here"
+
+# Mock mode (set to "true" to run without a real Jira org)
+DEMO_MODE="true"
 ```
 
 > **Tip:** Generate a secret with `openssl rand -base64 32`
+>
+> **Mock mode:** When `DEMO_MODE=true`, Jira ticket submissions return simulated responses (e.g., `DEMO-1234`). This lets reviewers test the full flow without Jira credentials.
 
 ### 4. Run the development server
 
@@ -141,6 +152,52 @@ No need for two separate deployments.
 
 ---
 
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Next.js 14 (Vercel)                 │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │  Landing (/) │  │  Login Page  │  │  Dashboard    │  │
+│  │  (public)    │  │  (public)    │  │  (protected)  │  │
+│  │  Server Comp │  │  Client Comp │  │  Client Comp  │  │
+│  └─────────────┘  └──────┬───────┘  └───────┬───────┘  │
+│                          │                  │           │
+│                ┌─────────▼──────────────────▼─────┐     │
+│                │       middleware.ts (JWT check)  │     │
+│                └─────────────────┬────────────────┘     │
+│                                  │                      │
+│  ┌──────────────────────────────▼───────────────────┐  │
+│  │              API Route Handlers                   │  │
+│  │  /api/auth/*  /api/chat  /api/create-jira-ticket  │  │
+│  └─────────┬────────┬─────────────┬─────────────────┘  │
+│            │        │             │                     │
+└────────────┼────────┼─────────────┼─────────────────────┘
+             │        │             │
+    NextAuth │  ┌─────▼─────┐  ┌───▼───────────┐
+    (JWT)    │  │ Supabase  │  │ Supabase      │
+             │  │ Edge Fn:  │  │ Edge Fn:      │
+             │  │ chat      │  │ create-jira-  │
+             │  │ (AI/LLM)  │  │ ticket (Jira) │
+             │  └───────────┘  └───────────────┘
+```
+
+### Data Flow
+
+1. **User → Chat:** Client sends message → `POST /api/chat` (Route Handler) → Supabase `chat` Edge Function → AI/LLM → SSE stream back to client
+2. **User → Ticket:** AI generates ticket card → user clicks Submit → `POST /api/create-jira-ticket` (Route Handler) → Supabase `create-jira-ticket` Edge Function → Jira REST API (or mock in demo mode)
+3. **Auth:** All protected pages pass through `middleware.ts` which checks for a valid NextAuth JWT cookie before rendering
+
+### Key Design Decisions
+
+- **Server-side proxies** keep Supabase keys out of the client bundle
+- **Streaming SSE** delivers real-time AI responses without polling
+- **JWT (not database sessions)** means zero-latency auth checks in middleware
+- **Mock mode** (`DEMO_MODE=true`) enables full-flow testing without external services
+
+---
+
 ## Authentication Flow
 
 ```
@@ -161,7 +218,7 @@ User visits /dashboard
 Sign in with credentials
    │
    ▼
-NextAuth verifies password (bcrypt)
+NextAuth verifies password
    │
    ▼
 JWT token issued (HS256, 24h expiry)
@@ -257,6 +314,25 @@ Proxies ticket data to the Supabase `create-jira-ticket` Edge Function.
 ├── tsconfig.json
 └── package.json
 ```
+
+---
+
+## Running Without External Services (Mock Mode)
+
+Set `DEMO_MODE=true` in your `.env.local` (or Vercel env vars) to run the full application without:
+- A Supabase project (for Jira ticket creation)
+- A Jira Cloud org
+
+In mock mode, the `/api/create-jira-ticket` endpoint returns simulated Jira responses like `DEMO-1234` with a fake Jira URL. The AI chat still requires the Supabase `chat` Edge Function.
+
+---
+
+## Demo Credentials
+
+| Username | Password | Role  |
+| -------- | -------- | ----- |
+| `admin`  | `admin`  | admin |
+| `angel`  | `angel`  | user  |
 
 ---
 
