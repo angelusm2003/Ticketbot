@@ -1,8 +1,8 @@
 import { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { compareSync, hashSync } from "bcryptjs";
 
 // Demo users — in production these would come from a database
+// Passwords are compared directly since these are demo accounts.
 const USERS = [
   {
     id: "1",
@@ -10,7 +10,7 @@ const USERS = [
     name: "Admin User",
     email: "admin@ticketbot.dev",
     role: "admin",
-    passwordHash: hashSync("admin", 10),
+    password: "admin",
   },
   {
     id: "2",
@@ -18,11 +18,12 @@ const USERS = [
     name: "Angel",
     email: "angel@ticketbot.dev",
     role: "user",
-    passwordHash: hashSync("angel", 10),
+    password: "angel",
   },
 ];
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -38,8 +39,7 @@ export const authOptions: NextAuthOptions = {
         );
         if (!user) return null;
 
-        const valid = compareSync(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        if (credentials.password !== user.password) return null;
 
         return {
           id: user.id,
